@@ -9,7 +9,7 @@ import model_multi_task
 import caffe_transform as caffe_t
 from data import ImageList
 
-project_path = "/home/jim/Documents/GitHub/MTlearn/"
+project_path = "C:/Users/jimch/Documents/GitHub/MTlearn/"
 
 
 def inv_lr_scheduler(param_lr, optimizer, iter_num, gamma, power, init_lr=0.001):
