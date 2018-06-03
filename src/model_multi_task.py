@@ -76,7 +76,7 @@ class HomoMultiTaskModel(object):
         self.train_cross_loss = 0
         self.train_multi_task_loss = 0
         self.train_total_loss = 0
-        self.print_interval = 500
+        self.print_interval = 20
 
         # covariance update frequency (one every #param iter)
         self.cov_update_freq = 100
