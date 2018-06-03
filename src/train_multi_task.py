@@ -9,7 +9,7 @@ import model_multi_task
 import caffe_transform as caffe_t
 from data import ImageList
 
-project_path = "C:\\Users\\jimch\\Documents\\GitHub\\MTlearn\\"
+project_path = "/home/jim/Documents/GitHub/MTlearn/"
 
 
 def inv_lr_scheduler(param_lr, optimizer, iter_num, gamma, power, init_lr=0.001):
@@ -37,7 +37,7 @@ def experiment(config):
 
     for iter_num in range(1, num_iter+1):
         if iter_num % test_interval == 0:
-            epoch_acc_list = test(dset_loaders["test"], model)
+            epoch_acc_list = test(dset_loaders["test"], model, config)
             for i in range(num_tasks):
                 print('Iter {:05d} Acc on Task {:d}: {:.4f}'.format(iter_num, i, epoch_acc_list[i]))
                 file_out.write('Iter {:05d} Acc on Task {:d}: {:.4f}\n'.format(iter_num, i, epoch_acc_list[i]))
@@ -66,20 +66,20 @@ def experiment(config):
         label_list = []
         for one_data in data_list:
             inputs, labels = one_data
-            input_list.append(torch.Torch(inputs, device=config["device"]))
-            label_list.append(torch.Torch(labels, device=config["device"]))
+            input_list.append(inputs.to(config["device"]))
+            label_list.append(labels.to(config["device"]))
         model.optimize_model(input_list, label_list)
 
 
-def predict(loader, model):
+def predict(loader, model, config):
     predict_list = []
     iter_ = iter(loader)
     start_test = True
     for i in range(len(loader)):
         data = iter_.next()
         inputs, labels = data
-        inputs = torch.Torch(inputs, device=config["device"])
-        labels = torch.Torch(labels, device=config["device"])
+        inputs = inputs.to(config["device"])
+        labels = labels.to(config["device"])
         outputs = model.test_model(inputs, i)
         if start_test:
             all_output = outputs.data.float()
@@ -92,7 +92,7 @@ def predict(loader, model):
     return predict
 
 
-def test(loaders, model):
+def test(loaders, model, config):
     accuracy_list = []
     iter_val = [iter(loader) for loader in loaders]
     for i in range(len(iter_val)):
@@ -101,8 +101,8 @@ def test(loaders, model):
         for j in range(len(loaders[i])):
             data = iter_.next()
             inputs, labels = data
-            inputs = torch.Torch(inputs, device=config["device"])
-            labels = torch.Torch(labels, device=config["device"])
+            inputs = inputs.to(config["device"])
+            labels = labels.to(config["device"])
             outputs = model.test_model(inputs, i)
             if start_test:
                 all_output = outputs.data.float()
@@ -121,13 +121,12 @@ if __name__ == "__main__":
     parser.add_argument('gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('dset_name', type=str, nargs='?', default='0', help="dataset name")
     args = parser.parse_args()
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
     config = {}
     config["dset_name"] = args.dset_name
     config["gpus"] = args.gpu_id.split(",")
     config["device"] = torch.device("cuda:"+args.gpu_id)
-    config["num_tasks"] = 4
+    config["num_tasks"] = 3
     config["num_iter"] = 30000
     config["test_interval"] = 100
     config["output_dir"] = "pytorch_multi_task"
@@ -144,10 +143,11 @@ if __name__ == "__main__":
     data_transforms = caffe_t.transform_test(data_transforms=data_transforms, resize_size=256, crop_size=224)
 
     # set dataset
-    batch_size = {"train": 8, "test": 1}
+    batch_size = {"train": 8, "test": 4}
     
     if config["dset_name"] == "Office":
-        task_name_list = ["amazon", "webcam", "dslr", "c"]
+        # task_name_list = ["amazon", "webcam", "dslr", "c"]
+        task_name_list = ["amazon", "webcam", "dslr"]
         train_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "train_5.txt")
                            for i in range(config["num_tasks"])]
         test_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "test_5.txt")

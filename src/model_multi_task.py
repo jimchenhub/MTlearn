@@ -119,9 +119,9 @@ class HomoMultiTaskModel(object):
             self.class_cov = torch.eye(output_num)
             self.feature_cov = torch.eye(self.bottleneck_size)
 
-            self.task_cov_var = torch.Torch(self.task_cov, device=self.device)
-            self.class_cov_var = torch.Torch(self.class_cov, device=self.device)
-            self.feature_cov_var = torch.Torch(self.feature_cov, device=self.device)
+            self.task_cov_var = self.task_cov.to(self.device)
+            self.class_cov_var = self.class_cov.to(self.device)
+            self.feature_cov_var = self.feature_cov.to(self.device)
 
         self.criterion = nn.CrossEntropyLoss()
         self.iter_num = 1
@@ -157,11 +157,11 @@ class HomoMultiTaskModel(object):
             multi_task_loss = tensor_op.MultiTaskLoss(weights, self.task_cov_var,
                                                       self.class_cov_var, self.feature_cov_var)
             total_loss = classifier_loss + self.trade_off * multi_task_loss
-            self.train_cross_loss += classifier_loss.data[0]
-            self.train_multi_task_loss += multi_task_loss.data[0]
+            self.train_cross_loss += classifier_loss.item()
+            self.train_multi_task_loss += multi_task_loss.item()
         else:
             total_loss = classifier_loss
-            self.train_cross_loss += classifier_loss.data[0]
+            self.train_cross_loss += classifier_loss.item()
         # update network parameters
         total_loss.backward()
         self.optimizer.step()
