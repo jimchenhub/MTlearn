@@ -61,7 +61,7 @@ def transform_train(resize_size=256, crop_size=227):
                                    std=[0.229, 0.224, 0.225])
   return  transforms.Compose([
         ResizeImage(resize_size),
-        transforms.RandomSizedCrop(crop_size),
+        transforms.RandomResizedCrop(crop_size),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         normalize

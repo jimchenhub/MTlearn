@@ -21,7 +21,8 @@ def TensorProduct(tensor1, tensor2, axes=(0, 0)):
 
 def UpdateCov(weight_matrix, tensor1, tensor2):
     size0 = weight_matrix.size(0)
-    final_result = torch.mm(weight_matrix.view(size0, -1), torch.t(torch.matmul(tensor1, torch.matmul(weight_matrix, torch.t(tensor2))).view(size0, -1)))
+    final_result = torch.mm(weight_matrix.view(size0, -1), 
+                            torch.t(torch.matmul(tensor1, torch.matmul(weight_matrix, torch.t(tensor2))).view(size0, -1)))
     return final_result + epsilon * torch.eye(final_result.size(0)).cuda()
 
 def MultiTaskLoss(weight_matrix, tensor1, tensor2, tensor3):

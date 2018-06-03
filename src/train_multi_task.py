@@ -1,41 +1,26 @@
-#from __future__ import print_function, division
-
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import Variable
-import numpy as np
-import torchvision
-from torchvision import datasets, transforms
-#import matplotlib.pyplot as plt
-import time
-import copy
+from __future__ import print_function, division
 import os
-from PIL import Image, ImageOps
-import numbers
 import argparse
-import pickle
-import random
-import sys
 
-project_path = "/home/large_dataset/caozhangjie/multi-task/DRN"
-#sys.path.append(os.path.join("/home/caozhangjie/run-czj/wgan-pytorch/alexnet", "src"))
+import numpy as np
+import torch
 
 import model_multi_task
 import caffe_transform as caffe_t
 from data import ImageList
 
+project_path = "C:\\Users\\jimch\\Documents\\GitHub\\MTlearn\\"
+
 
 def inv_lr_scheduler(param_lr, optimizer, iter_num, gamma, power, init_lr=0.001):
     """Decay learning rate by a factor of 0.1 every lr_decay_epoch epochs."""
     lr = init_lr * (1 + gamma * iter_num) ** (-power)
-
-    i=0
+    i = 0
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr * param_lr[i]
-        i+=1
-
+        i += 1
     return optimizer
+
 
 # train function
 def experiment(config):
@@ -47,17 +32,13 @@ def experiment(config):
     file_out = config["file_out"]
     output_dir = config["output_dir"]
 
-    since = time.time()
-    test_iter = 1
     best_acc = 0.0
-    
     len_renew = min([len(loader) - 1 for loader in dset_loaders["train"]])
-    bset_acc = 0
 
-    for iter_num in xrange(1, num_iter+1):
+    for iter_num in range(1, num_iter+1):
         if iter_num % test_interval == 0:
             epoch_acc_list = test(dset_loaders["test"], model)
-            for i in xrange(num_tasks):
+            for i in range(num_tasks):
                 print('Iter {:05d} Acc on Task {:d}: {:.4f}'.format(iter_num, i, epoch_acc_list[i]))
                 file_out.write('Iter {:05d} Acc on Task {:d}: {:.4f}\n'.format(iter_num, i, epoch_acc_list[i]))
                 file_out.flush()
@@ -69,7 +50,7 @@ def experiment(config):
             file_out.write('Best val Acc: {:4f}\n'.format(best_acc))
             file_out.flush()
             save_dict = {}
-            for i in xrange(len(model.networks)):
+            for i in range(len(model.networks)):
                 save_dict["model"+str(i)] = model.networks[i]
             save_dict["optimizer"] = model.optimizer
             save_dict["iter_num"] = model.iter_num
@@ -85,19 +66,20 @@ def experiment(config):
         label_list = []
         for one_data in data_list:
             inputs, labels = one_data
-            input_list.append(Variable(inputs).cuda())
-            label_list.append(Variable(labels).cuda())
+            input_list.append(torch.Torch(inputs, device=config["device"]))
+            label_list.append(torch.Torch(labels, device=config["device"]))
         model.optimize_model(input_list, label_list)
+
 
 def predict(loader, model):
     predict_list = []
     iter_ = iter(loader)
     start_test = True
-    for j in xrange(len(loaders[i])):
+    for i in range(len(loader)):
         data = iter_.next()
         inputs, labels = data
-        inputs= Variable(inputs.cuda())
-        labels = Variable(labels.cuda())
+        inputs = torch.Torch(inputs, device=config["device"])
+        labels = torch.Torch(labels, device=config["device"])
         outputs = model.test_model(inputs, i)
         if start_test:
             all_output = outputs.data.float()
@@ -113,14 +95,14 @@ def predict(loader, model):
 def test(loaders, model):
     accuracy_list = []
     iter_val = [iter(loader) for loader in loaders]
-    for i in xrange(len(iter_val)):
+    for i in range(len(iter_val)):
         iter_ = iter_val[i]
         start_test = True
-        for j in xrange(len(loaders[i])):
+        for j in range(len(loaders[i])):
             data = iter_.next()
             inputs, labels = data
-            inputs= Variable(inputs.cuda())
-            labels = Variable(labels.cuda())
+            inputs = torch.Torch(inputs, device=config["device"])
+            labels = torch.Torch(labels, device=config["device"])
             outputs = model.test_model(inputs, i)
             if start_test:
                 all_output = outputs.data.float()
@@ -133,59 +115,73 @@ def test(loaders, model):
         accuracy_list.append(torch.sum(torch.squeeze(predict).float() == all_label) / float(all_label.size()[0]))
     return accuracy_list
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Transfer Learning')
     parser.add_argument('gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('dset_name', type=str, nargs='?', default='0', help="dataset name")
     args = parser.parse_args()
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
     config = {}
     config["dset_name"] = args.dset_name
-    config["gpus"] = range(len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")))
+    config["gpus"] = args.gpu_id.split(",")
+    config["device"] = torch.device("cuda:"+args.gpu_id)
     config["num_tasks"] = 4
     config["num_iter"] = 30000
     config["test_interval"] = 100
     config["output_dir"] = "pytorch_multi_task"
-    os.system("mkdir -p ../snapshot/"+ config["output_dir"])
-    config["file_out"] = open("../snapshot/"+ config["output_dir"]+"/train_log.txt", "w")
+    output_path = "../snapshot/"+config["output_dir"]
+    if not os.path.isdir(output_path):
+        os.mkdir(output_path)
+    config["file_out"] = open("../snapshot/"+config["output_dir"]+"/train_log.txt", "w")
 
-    #set data_transforms
+    # set data_transforms
     data_transforms = {
         'train': caffe_t.transform_train(resize_size=256, crop_size=224),
         'val': caffe_t.transform_train(resize_size=256, crop_size=224),
     }
     data_transforms = caffe_t.transform_test(data_transforms=data_transforms, resize_size=256, crop_size=224)
-  
-    #set dataset
-    batch_size = {"train":24, "test":4}
+
+    # set dataset
+    batch_size = {"train": 8, "test": 1}
     
     if config["dset_name"] == "Office":
         task_name_list = ["amazon", "webcam", "dslr", "c"]
-        train_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "train_5.txt") for i in xrange(config["num_tasks"])]
-        test_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "test_5.txt") for i in xrange(config["num_tasks"])]
+        train_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "train_5.txt")
+                           for i in range(config["num_tasks"])]
+        test_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "test_5.txt")
+                          for i in range(config["num_tasks"])]
         dset_classes = range(10)
     elif config["dset_name"] == "Office-Home":
         task_name_list = ["Art", "Product", "Clipart", "Real_World"]
-        train_file_list = [os.path.join(project_path, "data", "office-home", task_name_list[i], "train_10.txt") for i in xrange(config["num_tasks"])]
-        test_file_list = [os.path.join(project_path, "data", "office-home", task_name_list[i], "test_10.txt") for i in xrange(config["num_tasks"])]
+        train_file_list = [os.path.join(project_path, "data", "office-home", task_name_list[i], "train_10.txt")
+                           for i in range(config["num_tasks"])]
+        test_file_list = [os.path.join(project_path, "data", "office-home", task_name_list[i], "test_10.txt")
+                          for i in range(config["num_tasks"])]
         dset_classes = range(65)
 
-
-    dsets = {"train": [ImageList(open(train_file_list[i]).readlines(), transform=data_transforms["train"]) for i in xrange(config["num_tasks"])], "test":[ImageList(open(test_file_list[i]).readlines(), transform=data_transforms["val9"]) for i in xrange(config["num_tasks"])]}
-    dset_loaders = {"train":[], "test":[]}
+    dsets = {"train": [ImageList(open(train_file_list[i]).readlines(), transform=data_transforms["train"])
+                       for i in range(config["num_tasks"])],
+             "test": [ImageList(open(test_file_list[i]).readlines(), transform=data_transforms["val9"])
+                      for i in range(config["num_tasks"])]}
+    dset_loaders = {"train": [], "test": []}
     for train_dset in dsets["train"]:
-        dset_loaders["train"].append(torch.utils.data.DataLoader(train_dset, batch_size=batch_size["train"], shuffle=True, num_workers=4))
+        dset_loaders["train"].append(torch.utils.data.DataLoader(train_dset, batch_size=batch_size["train"],
+                                                                 shuffle=True, num_workers=4))
     for test_dset in dsets["test"]:
-        dset_loaders["test"].append(torch.utils.data.DataLoader(test_dset, batch_size=batch_size["test"], shuffle=True, num_workers=4))   
+        dset_loaders["test"].append(torch.utils.data.DataLoader(test_dset, batch_size=batch_size["test"],
+                                                                shuffle=True, num_workers=4))
     config["loaders"] = dset_loaders
 
+    # construct model and initialize
+    config["model"] = model_multi_task.HomoMultiTaskModel(config["num_tasks"], "vgg16no_fc", len(dset_classes),
+                                                          config["gpus"], config["file_out"], trade_off=1,
+                                                          optim_param={"init_lr": 0.00003, "gamma": 0.3,
+                                                                       "power": 0.75, "stepsize": 3000})
 
-    #construct model and initialize
-    config["model"] = model_multi_task.HomoMultiTaskModel(config["num_tasks"], "vgg16no_fc", len(dset_classes), config["gpus"], config["file_out"], trade_off=1, optim_param={"init_lr":0.00003, "gamma":0.3, "power":0.75, "stepsize":3000})
-
-    #start train
-    print "start train"
+    # start train
+    print("start train")
     config["file_out"].write("start train\n")
     config["file_out"].flush()
     experiment(config)
