@@ -1,6 +1,7 @@
 from __future__ import print_function, division
 import os
 import argparse
+import datetime
 
 import numpy as np
 import torch
@@ -28,6 +29,7 @@ def experiment(config):
     num_iter = config["num_iter"]
     num_tasks = config["num_tasks"]
     test_interval = config["test_interval"]
+    save_interval = config["save_interval"]
     dset_loaders = config["loaders"]
     file_out = config["file_out"]
     output_dir = config["output_dir"]
@@ -38,6 +40,9 @@ def experiment(config):
     for iter_num in range(1, num_iter+1):
         if iter_num % test_interval == 0:
             epoch_acc_list = test(dset_loaders["test"], model, config)
+            t_now = datetime.datetime.now()
+            t = t_now.strftime("%Y-%m-%d-%H-%M-%S")
+            print(t)
             for i in range(num_tasks):
                 print('Iter {:05d} Acc on Task {:d}: {:.4f}'.format(iter_num, i, epoch_acc_list[i]))
                 file_out.write('Iter {:05d} Acc on Task {:d}: {:.4f}\n'.format(iter_num, i, epoch_acc_list[i]))
@@ -49,12 +54,13 @@ def experiment(config):
             print('Best val Acc: {:4f}'.format(best_acc))
             file_out.write('Best val Acc: {:4f}\n'.format(best_acc))
             file_out.flush()
-            save_dict = {}
-            for i in range(len(model.networks)):
-                save_dict["model"+str(i)] = model.networks[i]
-            save_dict["optimizer"] = model.optimizer
-            save_dict["iter_num"] = model.iter_num
-            torch.save(save_dict, "../snapshot/"+output_dir+"/iter_{:05d}_model.pth.tar".format(iter_num))
+            if iter_num % save_interval == 0:
+                save_dict = {}
+                for i in range(len(model.networks)):
+                    save_dict["model"+str(i)] = model.networks[i].state_dict()
+                save_dict["optimizer"] = model.optimizer
+                save_dict["iter_num"] = model.iter_num
+                torch.save(save_dict, "../snapshot/"+output_dir+"/iter_{:05d}_model.pth.tar".format(iter_num))
 
         if (iter_num-1) % len_renew == 0:
             iter_list = [iter(loader) for loader in dset_loaders["train"]]
@@ -112,7 +118,7 @@ def test(loaders, model, config):
                 all_output = torch.cat((all_output, outputs.data.float()), 0)
                 all_label = torch.cat((all_label, labels.data.float()), 0)
         _, predict = torch.max(all_output, 1)
-        accuracy_list.append(torch.sum(torch.squeeze(predict).float() == all_label) / float(all_label.size()[0]))
+        accuracy_list.append(float(torch.sum(torch.squeeze(predict).float() == all_label)) / float(all_label.size()[0]))
     return accuracy_list
 
 
@@ -129,6 +135,7 @@ if __name__ == "__main__":
     config["num_tasks"] = 3
     config["num_iter"] = 30000
     config["test_interval"] = 100
+    config["save_interval"] = 5000
     config["output_dir"] = "pytorch_multi_task"
     output_path = "../snapshot/"+config["output_dir"]
     if not os.path.isdir(output_path):
@@ -143,16 +150,16 @@ if __name__ == "__main__":
     data_transforms = caffe_t.transform_test(data_transforms=data_transforms, resize_size=256, crop_size=224)
 
     # set dataset
-    batch_size = {"train": 8, "test": 4}
+    batch_size = {"train": 32, "test": 4}
     
     if config["dset_name"] == "Office":
         # task_name_list = ["amazon", "webcam", "dslr", "c"]
         task_name_list = ["amazon", "webcam", "dslr"]
-        train_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "train_5.txt")
+        train_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "train_20.txt")
                            for i in range(config["num_tasks"])]
-        test_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "test_5.txt")
+        test_file_list = [os.path.join(project_path, "data", "office", task_name_list[i], "test_20.txt")
                           for i in range(config["num_tasks"])]
-        dset_classes = range(10)
+        dset_classes = range(31)
     elif config["dset_name"] == "Office-Home":
         task_name_list = ["Art", "Product", "Clipart", "Real_World"]
         train_file_list = [os.path.join(project_path, "data", "office-home", task_name_list[i], "train_10.txt")
@@ -176,7 +183,7 @@ if __name__ == "__main__":
 
     # construct model and initialize
     config["model"] = model_multi_task.HomoMultiTaskModel(config["num_tasks"], "vgg16no_fc", len(dset_classes),
-                                                          config["gpus"], config["file_out"], trade_off=1,
+                                                          config["gpus"], config["file_out"], trade_off=1.0,
                                                           optim_param={"init_lr": 0.00003, "gamma": 0.3,
                                                                        "power": 0.75, "stepsize": 3000})
 

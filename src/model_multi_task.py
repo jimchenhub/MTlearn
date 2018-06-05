@@ -76,7 +76,7 @@ class HomoMultiTaskModel(object):
         self.train_cross_loss = 0
         self.train_multi_task_loss = 0
         self.train_total_loss = 0
-        self.print_interval = 500
+        self.print_interval = 20
 
         # covariance update frequency (one every #param iter)
         self.cov_update_freq = 100
@@ -103,7 +103,7 @@ class HomoMultiTaskModel(object):
         self.networks = [nn.DataParallel(network, device_ids=gpu_ids) for network in self.networks]
 
         # construct optimizer
-        parameter_dict = [{"params": self.shared_layers.module.parameters(), "lr": 0}]
+        parameter_dict = [{"params": self.shared_layers.module.parameters(), "lr": 1}]
         parameter_dict += [{"params": self.networks[i].module.parameters(), "lr": 10} for i in range(self.num_tasks)]
         self.optimizer = optim.SGD(parameter_dict, lr=1, momentum=0.9, weight_decay=0.0005)
         self.parameter_lr_dict = []
@@ -171,7 +171,7 @@ class HomoMultiTaskModel(object):
             weight_size = self.networks[0].module[-1].weight.size()
             all_weights = [self.networks[i].module[-1].weight.view(1, weight_size[0], weight_size[1])
                            for i in range(self.num_tasks)]
-            weights = torch.cat(all_weights, dim=0).contiguous() 
+            weights = torch.cat(all_weights, dim=0).contiguous()
 
             # update cov parameters
             temp_task_cov_var = tensor_op.UpdateCov(weights.data,
@@ -186,31 +186,31 @@ class HomoMultiTaskModel(object):
             s = s.cpu().apply_(self.select_func).cuda()
             self.task_cov_var = torch.mm(u, torch.mm(torch.diag(s), torch.t(v)))
             this_trace = torch.trace(self.task_cov_var)
-            if this_trace > 3000.0:        
-                self.task_cov_var = torch.Tensor(self.task_cov_var / this_trace * 3000.0, device=self.device)
+            if this_trace > 3000.0:
+                self.task_cov_var = (self.task_cov_var/this_trace*3000.0).to(self.device)
             else:
-                self.task_cov_var = torch.Tensor(self.task_cov_var, device=self.device)
+                self.task_cov_var = self.task_cov_var.to(self.device)
             # comment to not use the other two covariance
+            
             # class covariance
             u, s, v = torch.svd(temp_class_cov_var)
             s = s.cpu().apply_(self.select_func).cuda()
             self.class_cov_var = torch.mm(u, torch.mm(torch.diag(s), torch.t(v)))
             this_trace = torch.trace(self.class_cov_var)
-            if this_trace > 3000.0:        
-                self.class_cov_var = torch.Tensor(self.class_cov_var / this_trace * 3000.0, device=self.device)
+            if this_trace > 3000.0:
+                self.class_cov_var = (self.class_cov_var / this_trace * 3000.0).to(self.device)
             else:
-                self.class_cov_var = torch.Tensor(self.class_cov_var, device=self.device)
+                self.class_cov_var = self.class_cov_var.to(self.device)
             # feature covariance
             u, s, v = torch.svd(temp_feature_cov_var)
             s = s.cpu().apply_(self.select_func).cuda()
             temp_feature_cov_var = torch.mm(u, torch.mm(torch.diag(s), torch.t(v)))
             this_trace = torch.trace(temp_feature_cov_var)
-            if this_trace > 3000.0:        
-                self.feature_cov_var += 0.0003 * torch.Tensor(temp_feature_cov_var / this_trace * 3000.0, 
-                                                              device=self.device)
+            if this_trace > 3000.0:
+                self.feature_cov_var += 0.0003 * (temp_feature_cov_var / this_trace * 3000.0).to(self.device)
             else:
-                self.feature_cov_var += 0.0003 * torch.Tensor(temp_feature_cov_var, device=self.device)
-
+                self.feature_cov_var += 0.0003 * temp_feature_cov_var.to(self.device)
+            
         self.iter_num += 1
         if self.iter_num % self.print_interval == 0:
             self.train_total_loss = self.train_cross_loss + self.train_multi_task_loss
